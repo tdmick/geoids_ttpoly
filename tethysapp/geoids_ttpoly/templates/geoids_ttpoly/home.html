@@ -1,0 +1,269 @@
+{% extends "geoids_ttpoly/base.html" %}
+{% load tethys_gizmos %}
+{% load staticfiles %}
+
+{% block header_buttons %}
+
+{% endblock %}
+
+{% block app_navigation_items %}
+
+	{{ block.super }}
+
+
+<li class="title" align="center">Controls</li>
+<div align="center">{% gizmo map_button %}</div>
+<div id="waiting_output" align="center" width="-webkit-fill-available"></div>
+<li class="title" align="center">Legend</li>
+ <div align="center"><img src="{% static '/geoids_ttpoly/images/legend.png' %}"></div>
+
+{% endblock %}
+
+
+{% block app_content %}
+ <!DOCTYPE html>
+<html>
+<head>
+<style>
+  html, body, #viewDiv {
+    padding: 0;
+    margin: 0;
+    height: -webkit-fill-available;
+    width: -webkit-fill-available;
+  }
+</style>
+<link rel="stylesheet" href="https://js.arcgis.com/4.6/esri/css/main.css">
+<script src="https://js.arcgis.com/4.6/"></script>
+<script>
+require([
+  "esri/Map",
+  "esri/layers/GraphicsLayer",
+  "esri/Graphic",
+  "esri/geometry/Point",
+  "esri/tasks/Geoprocessor",
+  "esri/tasks/support/FeatureSet",
+  "esri/views/MapView",
+  "esri/widgets/Legend",
+  "dojo/domReady!"
+], function(Map, GraphicsLayer, Graphic, Point, Geoprocessor, FeatureSet, MapView, Legend){
+
+	//a map with basemap
+	var map = new Map({
+    basemap: "streets"
+	});
+
+    //a graphics layer to show input point and output polygon
+    var graphicsLayer = new GraphicsLayer();
+    map.add(graphicsLayer);
+
+    var view = new MapView({
+    container: "viewDiv",
+    map: map,
+	center: [-111.8516, 40.4],
+	zoom: 10
+    });
+
+	// symbol for input point
+	var markerSymbol = {
+          type: "simple-marker", // autocasts as new SimpleMarkerSymbol()
+          color: [0, 0, 0],
+          size: 9,
+          outline: { // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1
+          }
+        };
+
+	// symbol for buffered polygon0
+    var fillSymbol0 = {
+          type: "simple-fill", // autocasts as new SimpleFillSymbol()
+          color: [255, 0, 0, 0.75],
+          style: "solid",
+          outline: { // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1
+          }
+        };
+    // symbol for buffered polygon1
+    var fillSymbol1 = {
+          type: "simple-fill", // autocasts as new SimpleFillSymbol()
+          color: [255, 128, 0, 0.75],
+          style: "solid",
+          outline: { // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1
+          }
+        };
+    // symbol for buffered polygon2
+    var fillSymbol2 = {
+          type: "simple-fill", // autocasts as new SimpleFillSymbol()
+          color: [255, 255, 0, 0.75],
+          style: "solid",
+          outline: { // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1
+          }
+        };
+    // symbol for buffered polygon3
+    var fillSymbol3 = {
+          type: "simple-fill", // autocasts as new SimpleFillSymbol()
+          color: [128, 255, 0, 0.75],
+          style: "solid",
+          outline: { // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1
+          }
+        };
+    // symbol for buffered polygon4
+    var fillSymbol4 = {
+          type: "simple-fill", // autocasts as new SimpleFillSymbol()
+          color: [0, 102, 0, 0.75],
+          style: "solid",
+          outline: { // autocasts as new SimpleLineSymbol()
+            color: [255, 255, 255],
+            width: 1
+          }
+        };
+
+	// Geoprocessing service url
+	var gpUrl = "http://geoserver2.byu.edu/arcgis/rest/services/Geoids/CalculateTTPolygonsUT/GPServer/Calculate%20DriveTime%20Polygons";
+
+    // create a new Geoprocessor
+	var gp = new Geoprocessor(gpUrl);
+	// define output spatial reference
+    gp.outSpatialReference = { // autocasts as new SpatialReference()
+          wkid: 102100 //EPSG3857
+        };
+    //define some variables
+    var point
+    var inputGraphic
+    var inputGraphicContainer
+    var featureSet
+    var BreakPoints
+
+	//add map click function
+    view.on("click", startPoint);
+    function startPoint(event) {
+    	graphicsLayer.removeAll();
+          point = new Point({
+            longitude: event.mapPoint.longitude,
+            latitude: event.mapPoint.latitude
+          });
+          inputGraphic = new Graphic({
+            geometry: point,
+            symbol: markerSymbol
+          });
+          graphicsLayer.add(inputGraphic);
+          inputGraphicContainer = [];
+          inputGraphicContainer.push(inputGraphic);
+	}
+
+	//main function
+    function bufferPoint(event) {
+				document.getElementById("waiting_output").innerHTML = '';
+				waiting_output();
+          featureSet = new FeatureSet();
+          featureSet.features = inputGraphicContainer;
+          BreakPoints = "5 10 15 30 60";
+
+
+		  // input parameters
+          var params = {
+            "Starting_Location": featureSet,
+            "Drive_Time_Values": BreakPoints
+          };
+          gp.submitJob(params).then(completeCallback, errBack, statusCallback);
+    }
+
+	function completeCallback(result){
+
+        gp.getResultData(result.jobId, "Travel_Time_Polygons").then(drawResult, drawResultErrBack);
+		graphicsLayer.add(inputGraphic);
+        var inputGraphicContainer = [];
+        inputGraphicContainer.push(inputGraphic);
+	}
+
+	function drawResult(data){
+
+	      var polygon_feature = data.value.features[0];
+		  polygon_feature.symbol = fillSymbol0;
+		  graphicsLayer.add(polygon_feature);
+
+		  var polygon_feature = data.value.features[1];
+		  polygon_feature.symbol = fillSymbol1;
+		  graphicsLayer.add(polygon_feature);
+
+		  var polygon_feature = data.value.features[2];
+		  polygon_feature.symbol = fillSymbol2;
+		  graphicsLayer.add(polygon_feature);
+
+		  var polygon_feature = data.value.features[3];
+		  polygon_feature.symbol = fillSymbol3;
+		  graphicsLayer.add(polygon_feature);
+
+		  var polygon_feature = data.value.features[4];
+		  polygon_feature.symbol = fillSymbol4;
+		  graphicsLayer.add(polygon_feature);
+
+		document.getElementById("waiting_output").innerHTML = '';
+
+
+	}
+
+
+
+	function drawResultErrBack(err) {
+        console.log("draw result error: ", err);
+    }
+
+	function statusCallback(data) {
+        console.log(data.jobStatus);
+    }
+    function errBack(err) {
+        console.log("gp error: ", err);
+    }
+    app = {bufferPoint:bufferPoint};
+
+    function waiting_output() {
+    	var wait_text = "<strong>Loading...</strong><br>" +
+        	"&nbsp;<img src='/static/geoids_ttpoly/images/loading.gif'>";
+    	document.getElementById('waiting_output').innerHTML = wait_text;
+	}
+
+});
+</script>
+</head>
+<body>
+
+  <div id="viewDiv"></div>
+</body>
+</html>
+{% endblock %}
+
+{# Use the after_app_content block for modals #}
+{% block after_app_content %}
+  <!-- Example Modal -->
+  <div class="modal fade" id="help-modal" tabindex="-1" role="dialog" aria-labelledby="help-modal-label">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h5 class="modal-title" id="help-modal-label">Example Modal</h5>
+        </div>
+        <div class="modal-body">
+          <p>You can add custom buttons to the app header using the <code>header_buttons</code> block. Use anchor/link tags for the button and wrap it in a div with the class <code>header-button</code>. For buttons with the gliphyicons, add the <code>glyphicon-button</code> class as well.</p>
+          <p>Ever have trouble using a modal in a Tethys app? Use the <code>after_app_content</code> block for modal content to allow them to function properly. See: <a href="https://getbootstrap.com/javascript/#modals">Bootstrap Modals</a></p>
+          <p>Add tooltips to any element by adding the <code>data-toggle</code>, <code>data-placement</code>, and <code>title</code> attributes to the button. See: <a href="https://getbootstrap.com/javascript/#tooltips">Bootstrap Tooltips</a></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" data-dismiss="modal">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block app_actions %}
+
+{% endblock %}
